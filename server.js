@@ -1,4 +1,7 @@
-require("dotenv").config(); // Carrega variáveis do arquivo .env
+// Carregar .env apenas no desenvolvimento
+if (process.env.NODE_ENV !== "production") {
+  require("dotenv").config();
+}
 
 const express = require("express");
 const mongoose = require("mongoose");
@@ -12,33 +15,39 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Validação das credenciais ImageKit
+// Debug: Logando as variáveis de ambiente antes de inicializar o ImageKit
+console.log("DEBUG IMAGEKIT ENV ====");
+console.log("Public Key:", process.env.IMAGEKIT_PUBLIC_KEY);
+console.log("Private Key:", process.env.IMAGEKIT_PRIVATE_KEY ? "OK" : "NÃO DEFINIDA");
+console.log("URL Endpoint:", process.env.IMAGEKIT_URL_ENDPOINT);
+console.log("=========================");
+
+// Validar se as variáveis estão setadas
 if (!process.env.IMAGEKIT_PUBLIC_KEY || !process.env.IMAGEKIT_PRIVATE_KEY || !process.env.IMAGEKIT_URL_ENDPOINT) {
   throw new Error("As credenciais do ImageKit não estão definidas.");
 }
 
-// Config ImageKit
+// Inicializar ImageKit
 const imagekit = new ImageKit({
-  publicKey : process.env.IMAGEKIT_PUBLIC_KEY,
-  privateKey : process.env.IMAGEKIT_PRIVATE_KEY,
-  urlEndpoint : process.env.IMAGEKIT_URL_ENDPOINT
+  publicKey: process.env.IMAGEKIT_PUBLIC_KEY,
+  privateKey: process.env.IMAGEKIT_PRIVATE_KEY,
+  urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT
 });
 
-// Config multer para upload
+// Configuração do multer (upload de imagens)
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 } // limite 5MB
+  limits: { fileSize: 5 * 1024 * 1024 } // Limite de 5MB
 });
 
-// MongoDB conexão
-const mongoURI = process.env.MONGO_URI;
-mongoose.connect(mongoURI, {
+// Conexão com o MongoDB
+mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 }).then(() => console.log("MongoDB conectado"))
-  .catch(err => console.error(err));
+  .catch(err => console.error("Erro ao conectar no MongoDB:", err));
 
-// Schema e Model para mensagem de chat
+// Schema do chat
 const messageSchema = new mongoose.Schema({
   username: String,
   text: String,
@@ -48,7 +57,7 @@ const messageSchema = new mongoose.Schema({
 
 const Message = mongoose.model("Message", messageSchema);
 
-// Middleware para servir frontend simples
+// Servir arquivos estáticos (ex: frontend)
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
 
@@ -60,15 +69,12 @@ app.post("/upload", upload.single("image"), async (req, res) => {
       return res.status(400).json({ error: "Nenhuma imagem enviada" });
     }
 
-    // Upload para ImageKit
     const result = await imagekit.upload({
       file: req.file.buffer.toString("base64"),
       fileName: req.file.originalname,
-      folder: "/chat_images",
-      useUniqueFileName: true
+      folder: "/chat_images"
     });
 
-    // Salvar mensagem no banco
     const message = new Message({
       username,
       text,
@@ -77,25 +83,24 @@ app.post("/upload", upload.single("image"), async (req, res) => {
 
     await message.save();
 
-    // Emitir mensagem para todos sockets conectados
     io.emit("chat message", message);
 
     return res.json({ message });
   } catch (err) {
-    console.error(err);
+    console.error("Erro no upload:", err);
     return res.status(500).json({ error: "Erro no upload" });
   }
 });
 
-// Endpoint para pegar mensagens antigas
+// Endpoint para buscar mensagens antigas
 app.get("/messages", async (req, res) => {
   const messages = await Message.find().sort({ createdAt: 1 }).limit(100);
   res.json(messages);
 });
 
-// Socket.io - comunicação em tempo real para mensagens texto simples
+// WebSocket (Socket.IO)
 io.on("connection", (socket) => {
-  console.log("Usuário conectado", socket.id);
+  console.log("Usuário conectado:", socket.id);
 
   socket.on("chat message", async (msg) => {
     const message = new Message(msg);
@@ -104,11 +109,11 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    console.log("Usuário desconectado", socket.id);
+    console.log("Usuário desconectado:", socket.id);
   });
 });
 
-// Iniciar servidor
+// Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
