@@ -1,7 +1,7 @@
 {
   "name": "imagekit-mongo-chat",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
