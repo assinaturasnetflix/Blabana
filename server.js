@@ -1,3 +1,5 @@
+require("dotenv").config(); // Carrega variáveis do arquivo .env
+
 const express = require("express");
 const mongoose = require("mongoose");
 const multer = require("multer");
@@ -10,21 +12,26 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// Validação das credenciais ImageKit
+if (!process.env.IMAGEKIT_PUBLIC_KEY || !process.env.IMAGEKIT_PRIVATE_KEY || !process.env.IMAGEKIT_URL_ENDPOINT) {
+  throw new Error("As credenciais do ImageKit não estão definidas.");
+}
+
 // Config ImageKit
 const imagekit = new ImageKit({
-  publicKey : "public_b6Ha//fMchI8XfX9r9cRTX/VoN0=",
-  privateKey : "private_QxmkHWo2Id+NMjlcGhh+81Uwbys=",
-  urlEndpoint : "https://ik.imagekit.io/Acacio"
+  publicKey : process.env.IMAGEKIT_PUBLIC_KEY,
+  privateKey : process.env.IMAGEKIT_PRIVATE_KEY,
+  urlEndpoint : process.env.IMAGEKIT_URL_ENDPOINT
 });
 
 // Config multer para upload
 const upload = multer({
-  storage: multer.memoryStorage(), // armazena na memória para enviar direto para ImageKit
+  storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 } // limite 5MB
 });
 
 // MongoDB conexão
-const mongoURI = "mongodb+srv://acaciofariav:ACACIOFARIAVICENTETXOBOY63@cluster0.ju4k6xu.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+const mongoURI = process.env.MONGO_URI;
 mongoose.connect(mongoURI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -57,7 +64,8 @@ app.post("/upload", upload.single("image"), async (req, res) => {
     const result = await imagekit.upload({
       file: req.file.buffer.toString("base64"),
       fileName: req.file.originalname,
-      folder: "/chat_images"
+      folder: "/chat_images",
+      useUniqueFileName: true
     });
 
     // Salvar mensagem no banco
